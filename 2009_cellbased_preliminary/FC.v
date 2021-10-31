@@ -97,7 +97,7 @@ always@(*) begin
       if(f_state == F_DONE) next_state = PEND;
       else next_state = READ_F;
     end
-    WRITE_M: next_state = (cnt_M_LEN == CMD_LEN) ? DONE : WRITE_M;
+    WRITE_M: next_state = (cnt_M_LEN == (CMD_LEN - 7'd1)) ? DONE : WRITE_M;
     WRITE_F: begin
       if(f_state == F_DONE) next_state = DONE;
       else next_state = WRITE_F;
@@ -168,57 +168,58 @@ end
 
 // done
 always@(*) begin
-  if(state == RST) done = 0;
+  if(state == RST) done = 1'd0;
   else begin
     if(!clk && !cmd_reg && state == WAIT_CMD) done = 1'd1;
     else if(state == DONE && F_RB) done = 1'd1;
-    else if(cmd) done = 1'd0;
+    else done = 1'd0;
   end
 end
 
 //cmd_reg
-always@(*) begin
-  if(state == RST) cmd_reg = 33'b0;
-  else if(cmd) cmd_reg = cmd;
+always@(posedge clk or posedge rst) begin
+  if(state == RST) cmd_reg <= 33'b0;
+  else if(cmd) cmd_reg <= cmd;
 end
 
 // read data
 integer i;
-always@(*) begin
+always@(posedge clk or posedge rst) begin
   if(state == RST || state == RST_F) begin
     for(i = 0; i <= CMD_LEN; i = i + 1) begin
-      mem[i] = 8'd0;
+      mem[i] <= 8'd0;
     end
   end else if(state == READ_M) begin
-      if(F_RB && M_D>= 0) mem[cnt_M_LEN - 7'd1] = M_D;
+      if(F_RB && M_D>= 0) mem[cnt_M_LEN - 7'd1] <= M_D;
   end else if(state == READ_F) begin
-      if(F_RB && F_IO>= 0) mem[cnt_F_LEN - 7'd1] = F_IO;
+      if(F_RB && F_IO>= 0) mem[cnt_F_LEN - 7'd1] <= F_IO;
   end
 end
 
 //Internal Memory=============================================================
 
 //M_RW
-always@(posedge clk or posedge rst) begin
-  if(rst) M_RW <= 1'd1;
-  else if(state == READ_M) M_RW <= 1'd1;
-  else if(state == WRITE_M) M_RW <= 1'd0;
+always@(*) begin
+  if(rst) M_RW = 1'd1;
+  else if(state == READ_M) M_RW = 1'd1;
+  else if(state == WRITE_M) M_RW = 1'd0;
+  else M_RW = 1'd1;
 end
 
 //M_A
-always@(posedge clk or posedge rst) begin
-  if(rst) M_A <= 0;
+always@(*) begin
+  if(rst) M_A = 0;
   else if(state == READ_M || state == WRITE_M) begin
-    M_A <= CMD_M_ADDR + cnt_M_LEN;
-  end
+    M_A = CMD_M_ADDR + cnt_M_LEN;
+  end else M_A = 0;
 end
 
 //M_D
-always@(posedge clk or posedge rst) begin
+always@(*) begin
   if(rst) m_d_data = 0;
   else if(state == WRITE_M) begin
     m_d_data = mem[cnt_M_LEN];
-  end
+  end else m_d_data = 0;
 end
 
 //cnt_M_LEN (count mem addr)
@@ -235,10 +236,10 @@ end
 
 //F_RW
 always@(*) begin
-  if(state == RST) F_RW <= 1'd1;
-  else if(state == RST_F) F_RW <= 1'd0;
-  else if(f_state <= 4'd7) F_RW <= 1'd0;
-  else F_RW <= 1'd1;
+  if(state == RST) F_RW = 1'd1;
+  else if(state == RST_F) F_RW = 1'd0;
+  else if(f_state <= 4'd7) F_RW = 1'd0;
+  else F_RW = 1'd1;
 end
 
 // F OUT DATA
@@ -252,40 +253,41 @@ always@(*) begin
     else if(f_state == WRITE_A1) f_io_data = CMD_F_ADDR[16:9];
     else if(f_state == WRITE_A2) f_io_data = {7'd0, CMD_F_ADDR[17]};
     else if(f_state == WRITE_D) f_io_data = mem[cnt_F_LEN];
+    else f_io_data = 8'hFF;
   end
 end
 
 //F_CLE
 always@(*) begin
-  if(state == RST) F_CLE <= 1'd0;
-  else if(state == RST_F) F_CLE <= 1'd1;
+  if(state == RST) F_CLE = 1'd0;
+  else if(state == RST_F) F_CLE = 1'd1;
   else if(f_state == WRITE_CHP ||
           f_state == WRITE_C80 ||
-          f_state == WRITE_C10) F_CLE <= 1'd1;
-  else F_CLE <= 1'd0;
+          f_state == WRITE_C10) F_CLE = 1'd1;
+  else F_CLE = 1'd0;
 end
 
 //F_ALE
 always@(*) begin
-  if(state == RST) F_ALE <= 1'd0;
+  if(state == RST) F_ALE = 1'd0;
   else if(f_state == WRITE_A0 ||
           f_state == WRITE_A1 ||
-          f_state == WRITE_A2) F_ALE <= 1'd1;
-  else F_ALE <= 1'd0;
+          f_state == WRITE_A2) F_ALE = 1'd1;
+  else F_ALE = 1'd0;
 end
 
 //F_WEN
 always@(*) begin
-  if(state == RST) F_WEN <= 1'd1;
-  else if(f_state <= 4'd7) F_WEN <= ~clk_div;
-  else F_WEN <= 1'd1;
+  if(state == RST) F_WEN = 1'd1;
+  else if(f_state <= 4'd7) F_WEN = ~clk_div;
+  else F_WEN = 1'd1;
 end
 
 //F_REN
 always@(*) begin
-  if(state == RST) F_REN <= 1'd1;
-  else if(f_state == READ_D) F_REN <= ~clk_div;
-  else F_REN <= 1'd1;
+  if(state == RST) F_REN = 1'd1;
+  else if(f_state == READ_D) F_REN = ~clk_div;
+  else F_REN = 1'd1;
 end
 
 //cnt_F_LEN (count flash addr)
